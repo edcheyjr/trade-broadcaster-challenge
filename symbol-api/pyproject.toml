@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "symbol-api"
+version = "0.1.0"
+description = ""
+authors = []
+license = "Proprietary"
+
+
+[tool.poetry.dependencies]
+python = "^3.10"
+flask = "^2.3.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

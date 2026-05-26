@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "data-provider"
+version = "0.1.0"
+description = ""
+authors = []
+license = "Proprietary"
+
+
+[tool.poetry.dependencies]
+python = "^3.10"
+websockets = "^11.0.3"
+requests = "^2.31.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
