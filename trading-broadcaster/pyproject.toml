@@ -3,8 +3,15 @@ name = "trading-broadcaster"
 version = "0.1.0"
 description = ""
 authors = []
-package-mode = false  
 license = "Proprietary"
+packages = [
+    { include = "app.py" },
+    { include = "consumer_session.py" },
+    { include = "interfaces.py" },
+    { include = "models.py" },
+    { include = "provider_connection.py" },
+    { include = "symbol_cache.py" },
+]
 
 
 
