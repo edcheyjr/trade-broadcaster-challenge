@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import websockets
 from consumer_session import ConsumerSession
 from symbol_cache import SymbolCache
+from websockets.legacy.server import serve
 
 HOST = "127.0.0.1"
 PORT = 9000
@@ -38,7 +38,7 @@ async def create_trading_broadcaster_server(symbol_cache: SymbolCache) -> Any:
         session = ConsumerSession(ws, symbol_cache)
         await session.run()
 
-    trading_broadcaster_server = await websockets.serve(handler, HOST, PORT)
+    trading_broadcaster_server = await serve(handler, HOST, PORT)
     print(f"server listening on port {PORT}")
     return trading_broadcaster_server
 

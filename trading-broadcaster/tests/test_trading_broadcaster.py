@@ -6,8 +6,11 @@ import sys
 import types
 import unittest
 from typing import Any, ClassVar
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+from consumer_session import ConsumerSession
+from interfaces import JsonMessage
+from symbol_cache import SymbolCache
 
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
@@ -22,17 +25,14 @@ if "websockets" not in sys.modules:
     async def _unexpected_serve(*args: object, **kwargs: object) -> None:
         raise RuntimeError("websockets.serve should not be used in unit tests")
 
-    websockets_stub.connect = _unexpected_connect
-    websockets_stub.serve = _unexpected_serve
+    setattr(websockets_stub, "connect", _unexpected_connect)
+    setattr(websockets_stub, "serve", _unexpected_serve)
     sys.modules["websockets"] = websockets_stub
-
-from consumer_session import ConsumerSession
-from symbol_cache import SymbolCache
 
 
 class FakeConsumerWebSocket:
     def __init__(self) -> None:
-        self.sent_messages: list[dict[str, Any]] = []
+        self.sent_messages: list[JsonMessage] = []
         self.closed = False
 
     async def send(self, message: str) -> None:
@@ -44,7 +44,7 @@ class FakeConsumerWebSocket:
 
 class FakeProviderConnection:
     fail_hosts: ClassVar[set[str]] = set()
-    reserve_responses: ClassVar[dict[str, list[dict[str, Any]]]] = {}
+    reserve_responses: ClassVar[dict[str, list[JsonMessage]]] = {}
     instances: ClassVar[dict[str, FakeProviderConnection]] = {}
 
     def __init__(self, host: str, session: Any) -> None:
@@ -77,7 +77,7 @@ class FakeProviderConnection:
     async def send_ack(self, processed: bool) -> None:
         self.acks.append(processed)
 
-    async def request_reservation(self, symbol: str) -> dict[str, Any]:
+    async def request_reservation(self, symbol: str) -> JsonMessage:
         self.reserve_requests.append(symbol)
         responses = self.reserve_responses.get(self.host, [])
         if responses:
@@ -106,14 +106,21 @@ class SymbolCacheTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ConsumerSessionTests(unittest.IsolatedAsyncioTestCase):
+    symbol_cache: MagicMock
+    websocket: FakeConsumerWebSocket
+    session: ConsumerSession
+
     async def asyncSetUp(self) -> None:
         FakeProviderConnection.reset()
-        self.symbol_cache = Mock()
-        self.symbol_cache.is_valid.side_effect = lambda symbol: symbol in {
-            "SYM-1",
-            "SYM-2",
-            "SYM-3",
-        }
+        self.symbol_cache = MagicMock()
+        self.symbol_cache.is_valid.side_effect = lambda symbol: (
+            symbol
+            in {
+                "SYM-1",
+                "SYM-2",
+                "SYM-3",
+            }
+        )
         self.websocket = FakeConsumerWebSocket()
         self.session = ConsumerSession(
             self.websocket,
@@ -190,7 +197,9 @@ class ConsumerSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.websocket.sent_messages, [])
         self.assertEqual(self.session.seen_trades_by_symbol, {})
 
-    async def test_valid_but_unsubscribed_symbol_is_acked_and_not_forwarded(self) -> None:
+    async def test_valid_but_unsubscribed_symbol_is_acked_and_not_forwarded(
+        self,
+    ) -> None:
         provider = FakeProviderConnection("ws://localhost:9001", self.session)
         provider.update_symbols({"SYM-2"})
 
@@ -235,13 +244,17 @@ class ConsumerSessionTests(unittest.IsolatedAsyncioTestCase):
             provider,
             {"symbol": "SYM-1", "price": 10.5, "quantity": 3, "timestamp": 100},
         )
-        await self.session.handle_consumer_message(json.dumps({"action": "clear-prices"}))
+        await self.session.handle_consumer_message(
+            json.dumps({"action": "clear-prices"})
+        )
         await self.session.handle_provider_trade(
             provider,
             {"symbol": "SYM-1", "price": 11.5, "quantity": 4, "timestamp": 100},
         )
 
-        trade_messages = [message for message in self.websocket.sent_messages if "symbol" in message]
+        trade_messages = [
+            message for message in self.websocket.sent_messages if "symbol" in message
+        ]
         self.assertEqual(len(trade_messages), 2)
         self.assertEqual(trade_messages[1]["timestamp"], 100)
 
@@ -272,7 +285,9 @@ class ConsumerSessionTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        await self.session.handle_consumer_message(json.dumps({"action": "clear-providers"}))
+        await self.session.handle_consumer_message(
+            json.dumps({"action": "clear-providers"})
+        )
 
         self.assertEqual(self.session.providers_by_host, {})
         self.assertIn("ws://localhost:9002", other_session.providers_by_host)
@@ -361,6 +376,54 @@ class ConsumerSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second_provider.reserve_requests, ["SYM-1"])
         self.assertEqual(first_provider.reserve_requests, ["SYM-1"])
         self.assertEqual(self.websocket.sent_messages[-1]["reserved"], True)
+
+    async def test_stale_trade_does_not_overwrite_reserve_candidate(self) -> None:
+        first_provider = FakeProviderConnection("ws://localhost:9001", self.session)
+        second_provider = FakeProviderConnection("ws://localhost:9002", self.session)
+        self.session.providers_by_host[first_provider.host] = first_provider
+        self.session.providers_by_host[second_provider.host] = second_provider
+        first_provider.update_symbols({"SYM-1"})
+        second_provider.update_symbols({"SYM-1"})
+
+        await self.session.handle_provider_trade(
+            first_provider,
+            {"symbol": "SYM-1", "price": 10.0, "quantity": 2, "timestamp": 101},
+        )
+        await self.session.handle_provider_trade(
+            first_provider,
+            {"symbol": "SYM-1", "price": 9.0, "quantity": 2, "timestamp": 99},
+        )
+        await self.session.handle_provider_trade(
+            second_provider,
+            {"symbol": "SYM-1", "price": 10.5, "quantity": 2, "timestamp": 100},
+        )
+
+        FakeProviderConnection.reserve_responses = {
+            "ws://localhost:9001": [
+                {
+                    "status": "processed",
+                    "reserved": True,
+                    "reservationId": "latest",
+                    "replyTo": {"action": "reserve-symbol", "symbol": "SYM-1"},
+                }
+            ],
+            "ws://localhost:9002": [
+                {
+                    "status": "processed",
+                    "reserved": True,
+                    "reservationId": "older",
+                    "replyTo": {"action": "reserve-symbol", "symbol": "SYM-1"},
+                }
+            ],
+        }
+
+        await self.session.handle_consumer_message(
+            json.dumps({"action": "reserve-symbol", "symbol": "SYM-1"})
+        )
+
+        self.assertEqual(first_provider.reserve_requests, ["SYM-1"])
+        self.assertEqual(second_provider.reserve_requests, [])
+        self.assertEqual(self.websocket.sent_messages[-1]["reservationId"], "latest")
 
     async def test_add_provider_connection_failure_returns_not_processed(self) -> None:
         FakeProviderConnection.fail_hosts.add("ws://localhost:9009")

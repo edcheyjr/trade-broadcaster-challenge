@@ -4,9 +4,8 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
-import websockets
-
-JsonMessage = dict[str, Any]
+from interfaces import JsonMessage
+from websockets.legacy.client import connect
 
 if TYPE_CHECKING:
     from consumer_session import ConsumerSession
@@ -24,7 +23,7 @@ class ProviderConnection:
         self._reservation_response_future: asyncio.Future[JsonMessage] | None = None
 
     async def connect(self) -> None:
-        self.websocket = await websockets.connect(self.host)
+        self.websocket = await connect(self.host)
         self.reader_task = asyncio.create_task(self._read_messages())
 
     def update_symbols(self, symbols: set[str]) -> None:
@@ -76,6 +75,8 @@ class ProviderConnection:
             self._reservation_response_future = None
 
     async def _read_messages(self) -> None:
+        if self.websocket is None:
+            raise RuntimeError("provider websocket is not connected")
         try:
             async for raw_message in self.websocket:
                 try:
@@ -95,7 +96,9 @@ class ProviderConnection:
         finally:
             future = self._reservation_response_future
             if future is not None and not future.done():
-                future.set_exception(ConnectionError(f"provider disconnected: {self.host}"))
+                future.set_exception(
+                    ConnectionError(f"provider disconnected: {self.host}")
+                )
 
             await self.session.handle_provider_disconnect(self.host, self)
 
