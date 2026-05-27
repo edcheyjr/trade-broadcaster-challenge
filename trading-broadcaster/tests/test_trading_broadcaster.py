@@ -8,26 +8,33 @@ import unittest
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, Mock, patch
 
-from consumer_session import ConsumerSession
-from interfaces import JsonMessage
-from symbol_cache import SymbolCache
-
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 if "websockets" not in sys.modules:
     websockets_stub = types.ModuleType("websockets")
+    legacy_stub = types.ModuleType("websockets.legacy")
+    client_stub = types.ModuleType("websockets.legacy.client")
 
     async def _unexpected_connect(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("websockets.connect should not be used in unit tests")
+        raise RuntimeError("websockets connect should not be used in unit tests")
 
     async def _unexpected_serve(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("websockets.serve should not be used in unit tests")
+        raise RuntimeError("websockets serve should not be used in unit tests")
 
     setattr(websockets_stub, "connect", _unexpected_connect)
     setattr(websockets_stub, "serve", _unexpected_serve)
+    setattr(client_stub, "connect", _unexpected_connect)
+    setattr(legacy_stub, "client", client_stub)
+    setattr(websockets_stub, "legacy", legacy_stub)
     sys.modules["websockets"] = websockets_stub
+    sys.modules["websockets.legacy"] = legacy_stub
+    sys.modules["websockets.legacy.client"] = client_stub
+
+from consumer_session import ConsumerSession
+from interfaces import JsonMessage
+from symbol_cache import SymbolCache
 
 
 class FakeConsumerWebSocket:
