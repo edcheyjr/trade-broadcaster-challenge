@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import requests
@@ -18,7 +19,8 @@ class SymbolCache:
         return symbol in self._symbols
 
     async def load(self) -> set[str]:
-        self._symbols = self._fetch_symbols()
+        # Offloads the blocking synchronous function to a separate thread
+        self._symbols = await asyncio.to_thread(self._fetch_symbols)
         return self.symbols
 
     def _fetch_symbols(self) -> set[str]:

@@ -97,8 +97,8 @@ class FakeProviderConnection:
         }
 
 
-class SymbolCacheTests(unittest.IsolatedAsyncioTestCase):
-    async def test_loads_valid_symbol_ids(self) -> None:
+class SymbolCacheTests(unittest.TestCase):
+    def test_loads_valid_symbol_ids(self) -> None:
         response = Mock()
         response.json.return_value = [{"id": "SYM-1"}, {"id": "SYM-2"}]
         response.raise_for_status.return_value = None
@@ -106,9 +106,9 @@ class SymbolCacheTests(unittest.IsolatedAsyncioTestCase):
         cache = SymbolCache("http://127.0.0.1:3000/api/symbols")
 
         with patch("symbol_cache.requests.get", return_value=response) as mock_get:
-            await cache.load()
+            symbols = cache._fetch_symbols()
 
-        self.assertEqual(cache.symbols, {"SYM-1", "SYM-2"})
+        self.assertEqual(symbols, {"SYM-1", "SYM-2"})
         mock_get.assert_called_once_with("http://127.0.0.1:3000/api/symbols", timeout=5)
 
 
