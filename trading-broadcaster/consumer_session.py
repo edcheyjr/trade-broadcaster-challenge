@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, TypeAlias
+from collections.abc import Callable
+from typing import Any
 
+from interfaces import JsonMessage, ProviderClient
 from models import ProviderTradeSnapshot, TradeEvent
 from provider_connection import ProviderConnection
-
-JsonMessage: TypeAlias = dict[str, Any]
 
 
 class ConsumerSession:
@@ -15,12 +15,12 @@ class ConsumerSession:
         self,
         websocket: Any,
         symbol_cache: Any,
-        provider_connection_cls: type[ProviderConnection] = ProviderConnection,
+        provider_connection_cls: Callable[[str, Any], ProviderClient] = ProviderConnection,
     ) -> None:
         self.websocket = websocket
         self.symbol_cache = symbol_cache
         self.provider_connection_cls = provider_connection_cls
-        self.providers_by_host: dict[str, ProviderConnection] = {}
+        self.providers_by_host: dict[str, ProviderClient] = {}
         self.latest_forwarded_by_symbol: dict[str, int] = {}
         self.seen_trades_by_symbol: dict[str, dict[str, ProviderTradeSnapshot]] = {}
         self._send_lock = asyncio.Lock()
@@ -79,7 +79,7 @@ class ConsumerSession:
             await self.send_json({"status": "not processed", "message": str(error)})
 
     async def handle_provider_trade(
-        self, provider: ProviderConnection, message: Any
+        self, provider: ProviderClient, message: Any
     ) -> None:
         required_fields = {"symbol", "price", "quantity", "timestamp"}
         if not isinstance(message, dict) or not required_fields.issubset(message):
@@ -109,7 +109,7 @@ class ConsumerSession:
         await self.send_json(trade.to_message())
 
     async def handle_provider_disconnect(
-        self, host: str, provider: ProviderConnection
+        self, host: str, provider: ProviderClient
     ) -> None:
         current_provider = self.providers_by_host.get(host)
         if current_provider is provider:
@@ -208,6 +208,13 @@ class ConsumerSession:
 
     def _record_seen_trade(self, host: str, trade: TradeEvent) -> None:
         symbol_snapshots = self.seen_trades_by_symbol.setdefault(trade.symbol, {})
+        existing_snapshot = symbol_snapshots.get(host)
+        if (
+            existing_snapshot is not None
+            and trade.timestamp <= existing_snapshot.trade.timestamp
+        ):
+            return
+
         self._arrival_counter += 1
         symbol_snapshots[host] = ProviderTradeSnapshot(
             host=host,
