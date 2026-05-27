@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trading Broadcaster Consumer Tester</title>
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --panel: #ffffff;
+        --ink: #17202a;
+        --muted: #5f6f82;
+        --line: #d9e2ec;
+        --accent: #0f766e;
+        --accent-dark: #0b5d57;
+        --danger: #b42318;
+        --ok: #157347;
+        --warn: #a15c07;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(135deg, rgba(15, 118, 110, 0.08), transparent 36%),
+          linear-gradient(315deg, rgba(37, 99, 235, 0.08), transparent 34%),
+          var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1;
+      }
+
+      .subtitle {
+        margin: 10px 0 0;
+        color: var(--muted);
+        max-width: 680px;
+      }
+
+      .toolbar,
+      .consumer,
+      .event-log {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 14px 40px rgba(23, 32, 42, 0.08);
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+        gap: 14px;
+        align-items: end;
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+        font: 14px var(--mono);
+        padding: 10px;
+      }
+
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+      }
+
+      button {
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+        font-weight: 750;
+        min-height: 40px;
+        padding: 10px 14px;
+      }
+
+      button:hover {
+        background: var(--accent-dark);
+      }
+
+      button.secondary {
+        background: #e7eef6;
+        color: var(--ink);
+      }
+
+      button.secondary:hover {
+        background: #d8e4f0;
+      }
+
+      button.danger {
+        background: var(--danger);
+      }
+
+      button.danger:hover {
+        background: #8f1d14;
+      }
+
+      .consumers {
+        display: grid;
+        gap: 18px;
+      }
+
+      .consumer {
+        padding: 16px;
+      }
+
+      .consumer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      .consumer-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .status {
+        border-radius: 999px;
+        background: #eef3f8;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        padding: 5px 9px;
+        text-transform: uppercase;
+      }
+
+      .status.open {
+        background: #dff7ea;
+        color: var(--ok);
+      }
+
+      .status.closed {
+        background: #fde7e4;
+        color: var(--danger);
+      }
+
+      .status.connecting {
+        background: #fff1d6;
+        color: var(--warn);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .event-log {
+        margin-top: 14px;
+        overflow: hidden;
+      }
+
+      .event-log-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 12px;
+      }
+
+      .events {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        min-height: 180px;
+        max-height: 360px;
+        overflow: auto;
+        padding: 12px;
+        background: #0f1720;
+      }
+
+      .event {
+        border-left: 3px solid #8aa2b7;
+        color: #dce6ef;
+        font: 13px/1.45 var(--mono);
+        overflow-wrap: anywhere;
+        padding-left: 10px;
+        white-space: pre-wrap;
+      }
+
+      .event.in {
+        border-left-color: #4ade80;
+      }
+
+      .event.out {
+        border-left-color: #60a5fa;
+      }
+
+      .event.error {
+        border-left-color: #fb7185;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 860px) {
+        header,
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        header {
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Trading Broadcaster Consumer Tester</h1>
+          <p class="subtitle">
+            Open one or more browser consumers, send WebSocket commands to the broadcaster,
+            and watch trade, command, and reserve responses as they arrive.
+          </p>
+        </div>
+        <button id="addConsumerButton" type="button">Add Consumer</button>
+      </header>
+
+      <section class="toolbar" aria-label="Default command values">
+        <label>
+          Broadcaster URL
+          <input id="broadcasterUrlInput" value="ws://127.0.0.1:9000" />
+        </label>
+        <label>
+          Provider URL
+          <input id="providerUrlInput" value="ws://127.0.0.1:9001" />
+        </label>
+        <label>
+          Symbol IDs, comma-separated
+          <textarea id="symbolsInput">a631dc6c-ee85-458d-80d7-50018aedfbad, 9e8bff74-50cd-4d80-900c-b5ce3bf371ee</textarea>
+        </label>
+        <span class="hint">Tip: open two consumers to test per-consumer state.</span>
+      </section>
+
+      <section id="consumers" class="consumers" aria-label="Consumers"></section>
+    </main>
+
+    <template id="consumerTemplate">
+      <article class="consumer">
+        <div class="consumer-header">
+          <div class="consumer-title">
+            <h2></h2>
+            <span class="status closed">closed</span>
+          </div>
+          <div class="actions">
+            <button data-action="connect" type="button">Connect</button>
+            <button data-action="disconnect" class="secondary" type="button">Disconnect</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button data-action="add-provider" type="button">Add Provider</button>
+          <button data-action="reserve-symbol" type="button">Reserve First Symbol</button>
+          <button data-action="clear-prices" class="secondary" type="button">Clear Prices</button>
+          <button data-action="clear-providers" class="secondary" type="button">Clear Providers</button>
+          <button data-action="clear-log" class="danger" type="button">Clear Log</button>
+        </div>
+
+        <section class="event-log">
+          <div class="event-log-header">
+            <strong>Events</strong>
+            <span class="hint">Incoming messages are browser WebSocket message events.</span>
+          </div>
+          <div class="events"></div>
+        </section>
+      </article>
+    </template>
+
+    <script src="./index.js"></script>
+  </body>
+</html>
