@@ -3,6 +3,7 @@ name = "symbol-api"
 version = "0.1.0"
 description = ""
 authors = []
+package-mode = false  
 license = "Proprietary"
 
 
